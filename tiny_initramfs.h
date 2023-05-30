@@ -34,6 +34,10 @@
 #define MAX_PATH_LEN              1024
 #endif
 
+#ifndef MAX_ROOT_MOUNTS
+#define MAX_ROOT_MOUNTS           32
+#endif
+
 #ifndef MODULES_FILE
 #define MODULES_FILE              "/modules"
 #endif
@@ -105,7 +109,7 @@ int traverse_file_by_line(const char *filename, traverse_line_t fn, void *data);
 
 /* mount.c */
 int parse_mount_options(char *syscall_data, size_t syscall_data_len, const char *option_string, int *nfsver);
-int mount_filesystem(const char *source, const char *target, const char *type, const char *flags, int override_flags_add, int override_flags_subtract);
+int mount_filesystem(const char *source, const char *target, const char *type, const char *flags);
 
 /* log.c */
 void panic(int err, ...) __attribute__((noreturn));
@@ -119,20 +123,13 @@ enum {
   WANT_SERIAL = 3
 };
 void wait_for_device(char *real_device_name /* MAX_PATH_LEN bytes */, int *timeout, const char *device, int delay);
-#ifdef ENABLE_UUID
 int scan_devices(char *device_name /* MAX_PATH_LEN bytes */, int type, unsigned int maj, unsigned int min, const char *uuid /* 16 bytes */, char *serial /* 20 bytes */);
 int parse_uuid(char *uuid_buf /* 16 bytes */, const char *string_representation);
-#endif
 #define VIRTIO_BLK_ID_BYTES	20	/* ID string length */
 int is_valid_device_name(const char *device_name, int *type, unsigned int* major, unsigned int *minor, char *uuid /* 16 bytes */, char *serial /* 20 bytes */);
 
 /* util.c */
 void append_to_buf(char *buf, size_t size, ...);
 void set_buf(char *buf, size_t size, ...);
-
-#ifdef ENABLE_NFS4
-/* nfs.c */
-int mount_nfs4(const char *source, const char *target, int mount_flags, const char *nfs_options);
-#endif
 
 #endif /* !defined(TINY_INITRAMFS_H) */

@@ -37,10 +37,6 @@
 static void parse_cmdline();
 static int parse_cmdline_helper(void *data, const char *line, int line_is_incomplete);
 static void try_exec(int orig_argc, char *const orig_argv[], const char *binary);
-#ifdef ENABLE_NFS4
-static int find_bootserver_from_pnp();
-static int find_bootserver_helper(void *data, const char *line, int line_is_incomplete);
-#endif
 
 static void cleanup_initramfs();
 
@@ -56,27 +52,21 @@ static int cleanup_module_helper(void *data, const char *line, int line_is_incom
 extern int init_module(void *module_image, unsigned long len, const char *param_values);
 #endif
 
-static char root_device[MAX_PATH_LEN];
-static char root_options[MAX_LINE_LEN];
-#ifdef ENABLE_NFS4
-static char root_nfshost[MAX_LINE_LEN];
-static char root_nfsdir[MAX_LINE_LEN];
-static char root_nfsoptions[MAX_LINE_LEN];
-#endif
-static char root_fstype[MAX_FILESYSTEM_TYPE_LEN];
+static int required_mounts = -1;
+static char mount_device[MAX_ROOT_MOUNTS][MAX_PATH_LEN];
+static char mount_target[MAX_ROOT_MOUNTS][MAX_PATH_LEN];
+static char mount_options[MAX_ROOT_MOUNTS][MAX_LINE_LEN];
+static char mount_fstype[MAX_ROOT_MOUNTS][MAX_FILESYSTEM_TYPE_LEN];
+
 static int root_delay;
 static int root_wait_indefinitely;
 static char init_binary[MAX_PATH_LEN];
-static int global_rw;
 
 int main(int argc, char **argv)
 {
   int r;
   int timeout_togo = DEVICE_TIMEOUT;
   char real_device_name[MAX_PATH_LEN] = { 0 };
-#ifdef ENABLE_NFS4
-  size_t root_fstype_len, root_options_len, root_nfsdir_len, root_nfsoptions_len;
-#endif
 
 #ifdef ENABLE_DEBUG
   warn("Began execution", NULL);
@@ -119,67 +109,31 @@ int main(int argc, char **argv)
   warn("Parsed ", PROC_CMDLINE_FILENAME, NULL);
 #endif
 
-  if (!strlen(root_device)) {
-#ifdef ENABLE_NFS4
-    if (strlen(root_nfshost))
-      set_buf(root_device, MAX_PATH_LEN, "/dev/nfs", NULL);
-    else
-#endif
-      panic(0, "No root filesystem (root=) specified", NULL);
+  if(required_mounts < 0) {
+      panic(0, "No root filesystem (mountdevice=... mount_target=/) specified", NULL);
   }
 
-#ifdef ENABLE_NFS4
-  root_fstype_len = strlen(root_fstype);
-
-  if (strcmp(root_device, "/dev/nfs") == 0) {
-    /* We have nfsroot, so build together new device name */
-    if (!strlen(root_nfshost)) {
-      r = find_bootserver_from_pnp();
-      if (r < 0 || !strlen(root_nfshost))
-        panic(r ? -r : ENOENT, "Failed to determine boot server from kernel", NULL);
+  for (int mount_idx = 0; mount_idx <= required_mounts; mount_idx++) {
+    if (strlen(mount_target[mount_idx]) == 0) {
+      panic(0, "No mount target for device ", mount_device[mount_idx], " specified", NULL);\
     }
-
-    /* Make sure file system type is set properly */
-    if (!root_fstype_len || (strcmp(root_fstype, "nfs") != 0 && strcmp(root_fstype, "nfs4") != 0)) {
-      if (root_fstype_len)
-        warn("rootfstype set to ", root_fstype, " but root=/dev/nfs specified. Assuming rootfstype=nfs.", NULL);
-      set_buf(root_fstype, MAX_FILESYSTEM_TYPE_LEN, "nfs", NULL);
-    }
-
-    root_nfsdir_len = strlen(root_nfsdir);
-    root_nfsoptions_len = strlen(root_nfsoptions);
-    root_options_len = strlen(root_options);
-
-    /* This will be special-cased when mounting the filesystem to
-     * replace it with the IP. */
-    if (!root_nfsdir_len)
-      set_buf(root_nfsdir, MAX_LINE_LEN, DEFAULT_ROOTFS_NFS_DIR, NULL);
-
-    if (strlen(root_nfshost) + 1 + root_nfsdir_len + 1 > MAX_PATH_LEN)
-      panic(0, "nfsroot=", root_nfshost, ":", root_nfsdir, " too long.", NULL);
-
-    set_buf(real_device_name, MAX_PATH_LEN, root_nfshost, ":", root_nfsdir, NULL);
-
-    if (root_nfsoptions_len) {
-      if (root_options_len + root_nfsoptions_len + 2 > MAX_LINE_LEN)
-        panic(0, "nfsroot options (\"", root_nfsoptions, "\") too long.", NULL);
-      append_to_buf(root_options, MAX_LINE_LEN, root_options_len ? "," : "", root_nfsoptions, NULL);
-    }
-  } else
-#endif
-  {
-    if (root_wait_indefinitely)
-      timeout_togo = -1;
-    wait_for_device(real_device_name, &timeout_togo, root_device, root_delay);
   }
-
+  
+  if (root_wait_indefinitely)
+    timeout_togo = -1;
+  for (int mount_idx = 0; mount_idx <= required_mounts; mount_idx++) {
+    wait_for_device(real_device_name, &timeout_togo, mount_device[mount_idx], root_delay);
+  }
+  
 #ifdef ENABLE_DEBUG
   warn("Waited for root device", NULL);
 #endif
 
-  r = mount_filesystem(real_device_name, TARGET_DIRECTORY, strlen(root_fstype) ? root_fstype : NULL, root_options, global_rw ? 0 : MS_RDONLY, global_rw ? MS_RDONLY : 0);
-  if (r < 0)
-    panic(-r, "Failed to mount root filesystem from ", root_device, NULL);
+  for (int mount_idx = 0; mount_idx <= required_mounts; mount_idx++) {
+    r = mount_filesystem(real_device_name, mount_target[mount_idx], strlen(mount_fstype[mount_idx]) ? mount_fstype[mount_idx] : NULL, mount_options[mount_idx]);
+    if (r < 0)
+      panic(-r, "Failed to mount filesystem from ", mount_device[mount_idx], " into ", mount_target[mount_idx], NULL);
+  }
 
 #ifdef ENABLE_DEBUG
   warn("Mounted root filesystem", NULL);
@@ -276,29 +230,39 @@ int parse_cmdline_helper(void *data, const char *line, int line_is_incomplete)
     return 0;
 
   for (token = strtok_r((char *)line, " \t", &saveptr); token != NULL; token = strtok_r(NULL, " \t", &saveptr)) {
-    if (!strncmp(token, "root=", 5)) {
-      token += 5;
+    if (!strncmp(token, "mountdevice=", 12)) {
+      token += 12;
+      required_mounts += 1;
+      if(required_mounts == MAX_ROOT_MOUNTS)
+        panic(0, "Too many mounts, max is 32");
       if (strlen(token) > MAX_PATH_LEN - 1)
-        panic(0, "Parameter root=", token, " too long", NULL);
+        panic(0, "Parameter mountdevice=", token, " too long", NULL);
       if (!is_valid_device_name(token, NULL, NULL, NULL, NULL, NULL))
         panic(0, "Parameter root=", token, " unsupported (only /dev/"
-#ifdef ENABLE_UUID
-              ", 0xMAJMIN and UUID= are "
-#else
-              " is "
-#endif
+              ", 0xMAJMIN, SERIAL= and UUID= are "
               " supported)", NULL);
-      set_buf(root_device, MAX_PATH_LEN, token, NULL);
-    } else if (!strncmp(token, "rootflags=", 10)) {
-      token += 10;
+      set_buf(mount_device[required_mounts], MAX_PATH_LEN, token, NULL);
+    } else if (!strncmp(token, "mounttarget=", 12)) {
+      token += 12;
+      if(required_mounts < 0)
+        panic(0, "Please specify mountdevice=... before mounttarget=...");
+      if (strlen(token) > MAX_PATH_LEN - 1 - strlen(TARGET_DIRECTORY))
+        panic(0, "Parameter mounttarget=", token, " too long", NULL);
+      set_buf(mount_target[required_mounts], MAX_PATH_LEN, TARGET_DIRECTORY, token, NULL);
+    } else if (!strncmp(token, "mountflags=", 11)) {
+      token += 11;
+      if(required_mounts < 0)
+        panic(0, "Please specify mountdevice=... before mountflags=...");
       /* this will automatically be at least 10 bytes shorter than
        * MAX_LINE_LEN */
-      set_buf(root_options, MAX_PATH_LEN, token, NULL);
-    } else if (!strncmp(token, "rootfstype=", 11)) {
-      token += 11;
+      set_buf(mount_options[required_mounts], MAX_PATH_LEN, token, NULL);
+    } else if (!strncmp(token, "mountfstype=", 12)) {
+      token += 12;
+      if(required_mounts < 0)
+        panic(0, "Please specify mountdevice=... before mountfstype=...");
       if (strlen(token) > MAX_FILESYSTEM_TYPE_LEN - 1)
-        panic(0, "Parameter rootfstype=", token, " too long", NULL);
-      set_buf(root_fstype, MAX_FILESYSTEM_TYPE_LEN, token, NULL);
+        panic(0, "Parameter mountfstype=", token, " too long", NULL);
+      set_buf(mount_fstype[required_mounts], MAX_FILESYSTEM_TYPE_LEN, token, NULL);
     } else if (!strncmp(token, "rootdelay=", 10)) {
       token += 10;
       lval = strtoul(token, &endptr, 10);
@@ -307,74 +271,15 @@ int parse_cmdline_helper(void *data, const char *line, int line_is_incomplete)
       root_delay = (int) lval;
     } else if (!strcmp(token, "rootwait")) {
       root_wait_indefinitely = 1;
-    } else if (!strcmp(token, "ro")) {
-      global_rw = 0;
-    } else if (!strcmp(token, "rw")) {
-      global_rw = 1;
     } else if (!strncmp(token, "init=", 5)) {
       token += 5;
       if (strlen(token) > MAX_PATH_LEN - 1)
         panic(0, "Parameter init=", token, " too long", NULL);
       set_buf(init_binary, MAX_PATH_LEN, token, NULL);
     }
-#ifdef ENABLE_NFS4
-    else if (!strncmp(token, "nfsroot=", 8)) {
-      char *ptr;
-
-      root_nfsdir[0] = '\0';
-      root_nfshost[0] = '\0';
-      root_nfsoptions[0] = '\0';
-
-      token += 8;
-      ptr = strchr(token, ',');
-      if (ptr) {
-        *ptr++ = '\0';
-        set_buf(root_nfsoptions, MAX_LINE_LEN, ptr, NULL);
-      }
-
-      ptr = strchr(token, ':');
-      if (ptr) {
-        *ptr = '\0';
-        set_buf(root_nfshost, MAX_LINE_LEN, token, NULL);
-        token = ptr + 1;
-      }
-
-      set_buf(root_nfsdir, MAX_LINE_LEN, token, NULL);
-    }
-#endif
   }
   return 0;
 }
-
-#ifdef ENABLE_NFS4
-int find_bootserver_from_pnp()
-{
-  return traverse_file_by_line(PROC_NET_PNP_FILENAME, (traverse_line_t)find_bootserver_helper, NULL);
-}
-
-int find_bootserver_helper(void *data, const char *line, int line_is_incomplete)
-{
-  const char *value;
-
-  (void)data;
-
-  /* ignore lines we don't understand */
-  if (line_is_incomplete)
-    return 0;
-
-  if (!strncmp(line, "bootserver", 10) && (line[10] == ' ' || line[10] == '\t')) {
-    value = &line[11];
-    while (*value == ' ' || *value == '\t')
-      ++value;
-    if (strlen(value) > 0)
-      set_buf(root_nfshost, MAX_LINE_LEN, value, NULL);
-
-    return 1;
-  }
-
-  return 0;
-}
-#endif
 
 void try_exec(int orig_argc, char *const orig_argv[], const char *binary)
 {

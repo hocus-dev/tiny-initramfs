@@ -47,8 +47,7 @@ static void determine_supported_filesystems();
 static int process_proc_filesystems(void *data, const char *line, int line_is_incomplete);
 
 int mount_filesystem(const char *source, const char *target,
-                     const char *type, const char *flags,
-                     int override_flags_add, int override_flags_subtract)
+                     const char *type, const char *flags)
 {
   int options;
   char data[MAX_LINE_LEN];
@@ -59,30 +58,10 @@ int mount_filesystem(const char *source, const char *target,
   warn("mount_filesystem(\"", source, "\", \"", target, "\", \"", type ? type : "(null)", "\", \"", flags, "\", ...): begin", NULL);
 #endif
 
-#ifdef ENABLE_NFS4
-  if (type && (!strcmp(type, "nfs") || !strcmp(type, "nfs4")))
-    nfsver = !strcmp(type, "nfs4") ? 4 : 0;
-#endif
   options = parse_mount_options(data, MAX_LINE_LEN, flags, nfsver != -1 ? &nfsver : NULL);
 
 #ifdef ENABLE_DEBUG
   warn("mount_filesystem: parsing mount options (done), unparsed options: ", data, NULL);
-#endif
-
-  options |= override_flags_add;
-  options &= ~override_flags_subtract;
-
-#ifdef ENABLE_NFS4
-  if (type && !strcmp(type, "nfs4") && nfsver != 4)
-    panic(0, "Cannot combine [nfs]vers=2/3 option with filesystem type nfs4.", NULL);
-  if (type && (!strcmp(type, "nfs") || !strcmp(type, "nfs4"))) {
-    if (nfsver != 4 && nfsver != 0)
-      panic(0, "Sorry, only NFSv4 is currently supported.", NULL);
-    /* Note that nfsver == 0 means we have type == nfs and no vers= parameter
-     * at this point - which means that in principle we should try first NFSv4
-     * and then NFSv3/2. But until we support NFSv3, we'll just do NFSv4. */
-    return mount_nfs4(source, target, options, data);
-  }
 #endif
 
 #ifdef ENABLE_DEBUG

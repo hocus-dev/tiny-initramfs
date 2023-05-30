@@ -32,7 +32,6 @@
 #include <stdint.h>
 #include <sys/sysmacros.h>
 
-#ifdef ENABLE_UUID
 #include <dirent.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -91,7 +90,6 @@ int parse_uuid(char *uuid_buf /* 16 bytes */, const char *string_representation)
 
   return 0;
 }
-#endif /* defined(ENABLE_UUID) */
 
 void wait_for_device(char *real_device_name, int *timeout, const char *device, int delay)
 {
@@ -117,12 +115,9 @@ void wait_for_device(char *real_device_name, int *timeout, const char *device, i
   /* Our timeout starts *after* the rootdelay. */
   start = time(NULL);
 
-#ifdef ENABLE_UUID
   if (type != WANT_NAME) {
     have_device = scan_devices(real_device_name, type, major, minor, uuid, serial);
-  } else
-#endif
-  {
+  } else {
     set_buf(real_device_name, MAX_PATH_LEN, device, NULL);
     have_device = access(device, F_OK) != 0;
   }
@@ -143,11 +138,9 @@ void wait_for_device(char *real_device_name, int *timeout, const char *device, i
     struct timespec rem;
     (void)nanosleep(&req, &rem);
 
-#ifdef ENABLE_UUID
     if (type != WANT_NAME)
       have_device = scan_devices(real_device_name, type, major, minor, uuid, serial);
     else
-#endif
       have_device = access(device, F_OK) != 0;
   }
 
@@ -163,18 +156,11 @@ void wait_for_device(char *real_device_name, int *timeout, const char *device, i
 
 int is_valid_device_name(const char *device_name, int *type, unsigned int* major, unsigned int *minor, char *uuid, char *serial)
 {
-#ifdef ENABLE_UUID
   int r;
   char *endptr;
   char uuid_buf[32 + 4 + 1] = { 0 };
   char uuid_temp[16];
   unsigned long x;
-#else
-  (void)major;
-  (void)minor;
-  (void)uuid;
-  (void)serial;
-#endif
 
   if (!device_name)
     return 0;
@@ -201,7 +187,6 @@ int is_valid_device_name(const char *device_name, int *type, unsigned int* major
     return 1;
   }
 
-#ifdef ENABLE_UUID
   /* 0x803 or so for 8:3 */
   if (device_name[0] == '0' && device_name[1] == 'x') {
     x = strtoul(device_name + 2, &endptr, 16);
@@ -240,12 +225,10 @@ int is_valid_device_name(const char *device_name, int *type, unsigned int* major
       *type = WANT_UUID;
     return r;
   }
-#endif
 
   return 0;
 }
 
-#ifdef ENABLE_UUID
 /* Which data types for this structure is available is wildly
  * incompatible between libc implementations, so we just use the
  * stdint.h types. */
@@ -501,5 +484,3 @@ int is_fs_with_serial(const char *device_name, const char *serial)
 
   return strncmp(serial, device_serial, VIRTIO_BLK_ID_BYTES) == 0;
 }
-
-#endif /* defined(ENABLE_UUID) */

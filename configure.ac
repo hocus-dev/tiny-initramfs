@@ -12,11 +12,6 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([
   Makefile
 ])
-AC_ARG_ENABLE([uuid], [AS_HELP_STRING([--disable-uuid], [Enable support for searching for devices via their UUID (default is yes)])])
-AS_IF([test x"$enable_uuid" != x"no"], [AC_DEFINE([ENABLE_UUID], [1], [Define if UUID support is enabled])])
-AC_ARG_ENABLE([nfs4], [AS_HELP_STRING([--enable-nfs4], [Enable support for mounting NFSv4 shares (default is no)])])
-AS_IF([test x"$enable_nfs4" = x"yes"], [AC_DEFINE([ENABLE_NFS4], [1], [Define if NFS4 support is enabled])])
-AM_CONDITIONAL([ENABLE_NFS4], [test x"$enable_nfs4" = x"yes"])
 AC_ARG_ENABLE([debug], [AS_HELP_STRING([--enable-debug], [Enable support for printing debug messages])])
 AS_IF([test x"$enable_debug" = x"yes"], [AC_DEFINE([ENABLE_DEBUG], [1], [Define if debug messages are enabled])])
 AC_ARG_ENABLE([modules], [AS_HELP_STRING([--enable-modules], [Enable support for loading modules (default is no)])])
