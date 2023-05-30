@@ -98,6 +98,14 @@ int main(int argc, char **argv)
   warn("Mounted /proc", NULL);
 #endif
 
+  r = mount("sys", "/sys", "sysfs", MS_NODEV | MS_NOEXEC | MS_NOSUID, NULL);
+  if (r < 0)
+    panic(errno, "Could not mount /sys", NULL);
+
+#ifdef ENABLE_DEBUG
+  warn("Mounted /sys", NULL);
+#endif
+
   r = mount("udev", "/dev", "devtmpfs", 0, DEVTMPFS_MOUNTOPTS);
   if (r < 0)
     panic(errno, "Could not mount /dev (as devtmpfs)", NULL);
@@ -284,8 +292,8 @@ int main(int argc, char **argv)
 #ifdef ENABLE_DEBUG
     warn("Switched root file system, contents of /proc/self/mountinfo:", NULL);
     debug_dump_file("/proc/self/mountinfo");
-    warn("Sleeping for 5s", NULL);
-    sleep(5);
+    //warn("Sleeping for 5s", NULL);
+    //sleep(5);
     warn("Booting the system", NULL);
 #endif
 
@@ -330,7 +338,7 @@ int parse_cmdline_helper(void *data, const char *line, int line_is_incomplete)
       token += 5;
       if (strlen(token) > MAX_PATH_LEN - 1)
         panic(0, "Parameter root=", token, " too long", NULL);
-      if (!is_valid_device_name(token, NULL, NULL, NULL, NULL))
+      if (!is_valid_device_name(token, NULL, NULL, NULL, NULL, NULL))
         panic(0, "Parameter root=", token, " unsupported (only /dev/"
 #ifdef ENABLE_UUID
               ", 0xMAJMIN and UUID= are "

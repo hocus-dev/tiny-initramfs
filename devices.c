@@ -30,6 +30,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <sys/sysmacros.h>
 
 #ifdef ENABLE_UUID
 #include <dirent.h>
@@ -60,6 +61,7 @@ static int is_ext234_with_uuid(const char *device_name, const char *uuid_buf);
 static int is_xfs_with_uuid(const char *device_name, const char *uuid_buf);
 static int is_btrfs_with_uuid(const char *device_name, const char *uuid_buf);
 static int read_block(const char *device_name, off_t start, void *data_buffer, size_t len);
+static int is_fs_with_serial(const char *device_name, const char *serial);
 
 int parse_uuid(char *uuid_buf /* 16 bytes */, const char *string_representation)
 {
@@ -103,9 +105,10 @@ void wait_for_device(char *real_device_name, int *timeout, const char *device, i
   int type;
   unsigned int major, minor;
   char uuid[16];
+  char serial[VIRTIO_BLK_ID_BYTES];
 
   /* Parse device information */
-  if (!is_valid_device_name(device, &type, &major, &minor, uuid))
+  if (!is_valid_device_name(device, &type, &major, &minor, uuid, serial))
     panic(0, "Unsupported device specified: ", device, NULL);
 
   if (delay)
@@ -116,7 +119,7 @@ void wait_for_device(char *real_device_name, int *timeout, const char *device, i
 
 #ifdef ENABLE_UUID
   if (type != WANT_NAME) {
-    have_device = scan_devices(real_device_name, type, major, minor, uuid);
+    have_device = scan_devices(real_device_name, type, major, minor, uuid, serial);
   } else
 #endif
   {
@@ -142,7 +145,7 @@ void wait_for_device(char *real_device_name, int *timeout, const char *device, i
 
 #ifdef ENABLE_UUID
     if (type != WANT_NAME)
-      have_device = scan_devices(real_device_name, type, major, minor, uuid);
+      have_device = scan_devices(real_device_name, type, major, minor, uuid, serial);
     else
 #endif
       have_device = access(device, F_OK) != 0;
@@ -158,7 +161,7 @@ void wait_for_device(char *real_device_name, int *timeout, const char *device, i
   }
 }
 
-int is_valid_device_name(const char *device_name, int *type, unsigned int* major, unsigned int *minor, char *uuid)
+int is_valid_device_name(const char *device_name, int *type, unsigned int* major, unsigned int *minor, char *uuid, char *serial)
 {
 #ifdef ENABLE_UUID
   int r;
@@ -170,6 +173,7 @@ int is_valid_device_name(const char *device_name, int *type, unsigned int* major
   (void)major;
   (void)minor;
   (void)uuid;
+  (void)serial;
 #endif
 
   if (!device_name)
@@ -181,6 +185,19 @@ int is_valid_device_name(const char *device_name, int *type, unsigned int* major
   if (strncmp(device_name, "/dev/", 5) == 0) {
     if (type)
       *type = WANT_NAME;
+    return 1;
+  }
+
+  if (strncmp(device_name, "SERIAL=", 7) == 0) {
+    device_name += 7;
+        
+    if (strlen(device_name) > VIRTIO_BLK_ID_BYTES)
+      return 0;
+    if(serial) {
+      strncpy(serial, device_name, VIRTIO_BLK_ID_BYTES);
+    }
+    if (type)
+      *type = WANT_SERIAL;
     return 1;
   }
 
@@ -240,7 +257,7 @@ struct linux_dirent {
     char             d_name[];
 };
 
-int scan_devices(char *device_name /* MAX_PATH_LEN bytes */, int type, unsigned int maj, unsigned int min, const char *uuid /* 16 bytes */)
+int scan_devices(char *device_name /* MAX_PATH_LEN bytes */, int type, unsigned int maj, unsigned int min, const char *uuid /* 16 bytes */, char *serial /* 20 bytes */)
 {
   int dirfd;
   int nread, bpos;
@@ -294,6 +311,12 @@ int scan_devices(char *device_name /* MAX_PATH_LEN bytes */, int type, unsigned 
           }
         } else if (type == WANT_UUID) {
           if (is_fs_with_uuid(fn_buf, uuid)) {
+            set_buf(device_name, MAX_PATH_LEN, fn_buf, NULL);
+            close(dirfd);
+            return 0;
+          }
+        } else if (type == WANT_SERIAL) {
+          if (is_fs_with_serial(d->d_name, serial)) {
             set_buf(device_name, MAX_PATH_LEN, fn_buf, NULL);
             close(dirfd);
             return 0;
@@ -454,4 +477,29 @@ int is_btrfs_with_uuid(const char *device_name, const char *uuid_buf)
   return memcmp(&buf[0x40], "_BHRfS_M", 8) == 0
       && memcmp(&buf[0x20], uuid_buf, 16) == 0;
 }
+
+/* Search for virtio-blk devices with the given serial 
+ * We need to read /sys/block/<device_name>/serial
+ */
+int is_fs_with_serial(const char *device_name, const char *serial)
+{
+  int fd;
+  ssize_t n;
+  char fn_buf[MAX_PATH_LEN];
+  char device_serial[VIRTIO_BLK_ID_BYTES] = { 0 };
+
+  set_buf(fn_buf, MAX_PATH_LEN, "/sys/block/", device_name, "/serial", NULL);
+  fd = open(fn_buf, O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    return 0;
+
+  n = read(fd, device_serial, VIRTIO_BLK_ID_BYTES);
+  close(fd);
+  if (n < 0) {
+    return 0;
+  }
+
+  return strncmp(serial, device_serial, VIRTIO_BLK_ID_BYTES) == 0;
+}
+
 #endif /* defined(ENABLE_UUID) */

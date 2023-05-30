@@ -126,14 +126,16 @@ void warn(const char *str1, ...);
 enum {
   WANT_NAME   = 0,
   WANT_MAJMIN = 1,
-  WANT_UUID   = 2
+  WANT_UUID   = 2,
+  WANT_SERIAL = 3
 };
 void wait_for_device(char *real_device_name /* MAX_PATH_LEN bytes */, int *timeout, const char *device, int delay);
 #ifdef ENABLE_UUID
-int scan_devices(char *device_name /* MAX_PATH_LEN bytes */, int type, unsigned int maj, unsigned int min, const char *uuid /* 16 bytes */);
+int scan_devices(char *device_name /* MAX_PATH_LEN bytes */, int type, unsigned int maj, unsigned int min, const char *uuid /* 16 bytes */, char *serial /* 20 bytes */);
 int parse_uuid(char *uuid_buf /* 16 bytes */, const char *string_representation);
 #endif
-int is_valid_device_name(const char *device_name, int *type, unsigned int* major, unsigned int *minor, char *uuid /* 16 bytes */);
+#define VIRTIO_BLK_ID_BYTES	20	/* ID string length */
+int is_valid_device_name(const char *device_name, int *type, unsigned int* major, unsigned int *minor, char *uuid /* 16 bytes */, char *serial /* 20 bytes */);
 
 /* util.c */
 void append_to_buf(char *buf, size_t size, ...);

@@ -95,7 +95,7 @@ int process_fstab_entry(fstab_find_fs_data *data, const char *orig_line, int lin
       1
 #endif
   ) {
-    if (!is_valid_device_name(fields[0], NULL, NULL, NULL, NULL))
+    if (!is_valid_device_name(fields[0], NULL, NULL, NULL, NULL, NULL))
       return -ENODEV;
   }
 

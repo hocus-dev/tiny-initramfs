@@ -1,3 +1,9 @@
+# What is in this fork?
+This is a minimal initrd for usage with Hocus. UUID based mounts are unreliable when used with conjuction with OverlayBD as most obd images don't have an disk UUID or have the same UUID. This initramfs is designed to mount `virtio-blk` disks by their serial number. To mount an rootfs please use:
+```
+root=SERIAL=<disk_serial>
+```
+
 tiny-initramfs - A minimalistic initramfs implementation
 ========================================================
 
