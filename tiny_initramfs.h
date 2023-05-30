@@ -103,17 +103,6 @@
 typedef int (*traverse_line_t)(void *data, const char *line, int line_is_incomplete);
 int traverse_file_by_line(const char *filename, traverse_line_t fn, void *data);
 
-/* fstab.c */
-typedef struct fstab_info {
-  char source[MAX_PATH_LEN];
-  char dest[MAX_PATH_LEN];
-  char type[MAX_PATH_LEN];
-  char options[MAX_LINE_LEN];
-  int dump;
-  int pass;
-} fstab_info;
-int fstab_find_fs(const char *dest, fstab_info *info);
-
 /* mount.c */
 int parse_mount_options(char *syscall_data, size_t syscall_data_len, const char *option_string, int *nfsver);
 int mount_filesystem(const char *source, const char *target, const char *type, const char *flags, int override_flags_add, int override_flags_subtract);

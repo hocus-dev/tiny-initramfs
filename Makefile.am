@@ -2,7 +2,7 @@ AM_CPPFLAGS = -Wall -Wextra
 
 pkglibexec_PROGRAMS = tiny_initramfs
 
-tiny_initramfs_SOURCES    = tiny_initramfs.c io.c fstab.c mount.c log.c devices.c util.c
+tiny_initramfs_SOURCES    = tiny_initramfs.c io.c mount.c log.c devices.c util.c
 if ENABLE_NFS4
   tiny_initramfs_SOURCES += nfs.c
 endif

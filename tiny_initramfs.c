@@ -73,7 +73,6 @@ int main(int argc, char **argv)
 {
   int r;
   int timeout_togo = DEVICE_TIMEOUT;
-  fstab_info usrfs_info;
   char real_device_name[MAX_PATH_LEN] = { 0 };
 #ifdef ENABLE_NFS4
   size_t root_fstype_len, root_options_len, root_nfsdir_len, root_nfsoptions_len;
@@ -189,76 +188,12 @@ int main(int argc, char **argv)
   /* We need these regardless of /usr handling */
   if (access(TARGET_DIRECTORY "/dev", F_OK) != 0)
     panic(errno, "/dev doesn't exist on root filesystem", NULL);
+  if (access(TARGET_DIRECTORY "/sys", F_OK) != 0)
+    panic(errno, "/sys doesn't exist on root filesystem", NULL);
   if (access(TARGET_DIRECTORY "/proc", F_OK) != 0)
     panic(errno, "/proc doesn't exist on root filesystem", NULL);
 
-  /* Make sure we mount /usr if present in /etc/fstab
-   *  (no /etc/fstab is no error, we just assume that there'll
-   *  be no entry then) */
-  r = fstab_find_fs("/usr", &usrfs_info);
-  if (r < 0 && r != -ENOENT && r != -ENODEV)
-    panic(-r, "Failed to parse /etc/fstab in root device (non-existence would not be an error)", NULL);
-  if (r == -ENODEV)
-    panic(0, "Entry in /etc/fstab for /usr must be a (non-symlink) kernel device path"
-#ifdef ENABLE_UUID
-    ", or of the form UUID="
-#endif
-#ifdef ENABLE_NFS4
-    ", or an NFS filesystem."
-#endif
-         , NULL);
-
-#ifdef ENABLE_DEBUG
-  warn("Parsed ", FSTAB_FILENAME, NULL);
-#endif
-
-  if (r == 0) {
-    int usr_rw_override = global_rw;
-
-#ifdef ENABLE_DEBUG
-    warn("Separate /usr filesystem: trying to mount", NULL);
-#endif
-
-    if (
-#ifdef ENABLE_NFS4
-        strcmp(usrfs_info.type, "nfs") != 0 && strcmp(usrfs_info.type, "nfs4") != 0
-#else
-        1
-#endif
-       ) {
-      /* wait for /usr filesystem device */
-      wait_for_device(real_device_name, &timeout_togo, usrfs_info.source, 0);
-
-#ifdef ENABLE_DEBUG
-      warn("Waited for /usr device", NULL);
-#endif
-    }
-#ifdef ENABLE_NFS4
-    else {
-      set_buf(real_device_name, MAX_PATH_LEN, usrfs_info.source, NULL);
-
-      /* for network filesystems don't consider ro/rw on the 
-       * kernel command line, but just keep the options set
-       * in /etc/fstab */
-      usr_rw_override = 0;
-
-#ifdef ENABLE_DEBUG
-      warn("No need to wait for /usr device (NFS)", NULL);
-#endif
-    }
-#endif /* defined(ENABLE_NFS4) */
-
-    /* mount it */
-    r = mount_filesystem(real_device_name, TARGET_DIRECTORY "/usr", usrfs_info.type, usrfs_info.options, usr_rw_override ? 0 : MS_RDONLY, usr_rw_override ? MS_RDONLY : 0);
-    if (r < 0)
-      panic(-r, "Failed to mount /usr filesystem from ", usrfs_info.source, NULL);
-
-#ifdef ENABLE_DEBUG
-    warn("Mounted /usr filesystem", NULL);
-  } else {
-    warn("No separate /usr filesystem", NULL);
-#endif
-  }
+  /* Don't support fstab */
 
   /* move mounts */
   r = mount("/dev", TARGET_DIRECTORY "/dev", NULL, MS_MOVE, NULL);
@@ -274,8 +209,15 @@ int main(int argc, char **argv)
     warn("Moved /proc mount", NULL);
 #endif
 
+  if (!r)
+    r = mount("/sys", TARGET_DIRECTORY "/sys", NULL, MS_MOVE, NULL);
+
+#ifdef ENABLE_DEBUG
+    warn("Moved /sys mount", NULL);
+#endif
+
   if (r < 0)
-    panic(errno, "Couldn't move /dev or /proc from initramfs to root filesystem", NULL);
+    panic(errno, "Couldn't move /dev or /sys or /proc from initramfs to root filesystem", NULL);
 
   /* clean up initramfs contents to free memory */
   cleanup_initramfs();
@@ -475,6 +417,7 @@ void cleanup_initramfs()
    * there. */
   (void) rmdir("/dev");
   (void) rmdir("/proc");
+  (void) rmdir("/sys");
   (void) unlink("/init");
 #ifdef ENABLE_MODULES
   (void) traverse_file_by_line(MODULES_FILE, (traverse_line_t) cleanup_module_helper, NULL);
