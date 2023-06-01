@@ -150,6 +150,7 @@ int main(int argc, char **argv)
             cur_len -= 1;
             if (mount_target[mount_idx][i] == '/') {
               mount_target[mount_idx][i] = 0;
+              break;
             }
           }
         }
