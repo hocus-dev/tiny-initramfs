@@ -482,5 +482,9 @@ int is_fs_with_serial(const char *device_name, const char *serial)
     return 0;
   }
 
+  //#ifdef ENABLE_DEBUG
+  //warn("File ", fn_buf, " contains ", device_serial, NULL);
+  //#endif
+
   return strncmp(serial, device_serial, VIRTIO_BLK_ID_BYTES) == 0;
 }

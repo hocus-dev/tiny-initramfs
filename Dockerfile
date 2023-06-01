@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install dietlibc-dev cpio
 WORKDIR /build
 COPY . .
 RUN ./autogen.sh \
+    #&& ./configure --enable-debug CC="diet gcc" \
     && ./configure CC="diet gcc" \
     && make \
     && mkdir initramfs \

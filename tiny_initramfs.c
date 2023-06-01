@@ -123,20 +123,67 @@ int main(int argc, char **argv)
     timeout_togo = -1;
   for (int mount_idx = 0; mount_idx <= required_mounts; mount_idx++) {
     wait_for_device(real_device_name, &timeout_togo, mount_device[mount_idx], root_delay);
-  }
-  
-#ifdef ENABLE_DEBUG
-  warn("Waited for root device", NULL);
-#endif
 
-  for (int mount_idx = 0; mount_idx <= required_mounts; mount_idx++) {
+  #ifdef ENABLE_DEBUG
+    warn("Waited for device ", mount_device[mount_idx], NULL);
+  #endif
+
     r = mount_filesystem(real_device_name, mount_target[mount_idx], strlen(mount_fstype[mount_idx]) ? mount_fstype[mount_idx] : NULL, mount_options[mount_idx]);
+    if (r == -ENOENT) {
+      // Recursive mkdir
+      int orig_len = strlen(mount_target[mount_idx]);
+      int cur_len = orig_len;
+      // First iterate up until we find an existing parent
+      while(r == -ENOENT && mount_target[mount_idx][0] == '/') {
+        if (mkdir(mount_target[mount_idx], 0777) < 0) {
+          r = -errno;
+        } else {
+          r = 0;
+        }
+        if (r == -EEXIST) {
+          // We're done
+          r = 0;
+        }
+        if (r == -ENOENT) {
+          // Iterate up the directory structure
+          for (int i = cur_len - 1; i>=0; i--) {
+            cur_len -= 1;
+            if (mount_target[mount_idx][i] == '/') {
+              mount_target[mount_idx][i] = 0;
+            }
+          }
+        }
+      }
+
+      // Restore the original path and mkdir along it
+      while (r == 0 && cur_len < orig_len) {
+        if (mount_target[mount_idx][cur_len] == 0) {
+          // Ok we truncated the path before, try mkdir on it
+          mount_target[mount_idx][cur_len] = '/';
+          if (mkdir(mount_target[mount_idx], 0777) < 0) {
+            r = -errno;
+          } else {
+            r = 0;
+          }
+          if (r == -EEXIST) {
+            // We're done
+            r = 0;
+          }
+        }
+        cur_len += 1;
+      }
+      
+      if (r == 0) {
+        r = mount_filesystem(real_device_name, mount_target[mount_idx], strlen(mount_fstype[mount_idx]) ? mount_fstype[mount_idx] : NULL, mount_options[mount_idx]);
+      }
+    }
     if (r < 0)
       panic(-r, "Failed to mount filesystem from ", mount_device[mount_idx], " into ", mount_target[mount_idx], NULL);
   }
 
 #ifdef ENABLE_DEBUG
-  warn("Mounted root filesystem", NULL);
+  warn("Mounted all filesystems, contents of /proc/self/mountinfo:", NULL);
+  debug_dump_file("/proc/self/mountinfo");
 #endif
 
   /* We need these regardless of /usr handling */
