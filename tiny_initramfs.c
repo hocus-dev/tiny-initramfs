@@ -197,6 +197,7 @@ int main(int argc, char **argv)
     try_exec(argc, argv, init_binary);
   } else {
     try_exec(argc, argv, "/sbin/init");
+    try_exec(argc, argv, "/init"); // NixOS compatibility
     try_exec(argc, argv, "/etc/init");
     try_exec(argc, argv, "/bin/init");
     try_exec(argc, argv, "/bin/sh");
