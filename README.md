@@ -1,10 +1,25 @@
 # What is in this fork?
+
 This is a minimal initrd for usage with Hocus. UUID based mounts are unreliable when used with conjuction with OverlayBD as most obd images don't have an disk UUID or have the same UUID. This initramfs is designed to mount `virtio-blk` disks by their serial number. To mount an rootfs please use:
 ```
-root=SERIAL=<disk_serial>
+mountdevice=SERIAL=<disk_serial> mount_target=/
 ```
+Up to 32 boot time mounts are supported:
+```
+mountdevice=SERIAL=<disk1_serial> mount_target=/
+mountdevice=SERIAL=<disk2_serial> mount_target=/mount2
+... 
+mountdevice=SERIAL=<diskN_serial> mount_target=/mountN
+```
+Disks are mounted in the order specified on the kernel cmdline, if a mountpoint does not exist then the target directory including required parent directories will be created. Mount options are customisable:
+```
+mountdevice=SERIAL=<disk_serial> mount_target=<mount_target> mountflags=<optional_mount_options> mountfstype=<mount_filesystem_type>
+```
+By specifying `mountfstype` on the command line the OS will boot much faster as the initrd will avoid scanning the disk for the filesystem type.
 
-tiny-initramfs - A minimalistic initramfs implementation
+To build this initrd please run `./docker-build.sh`
+
+[ORIGINAL README] tiny-initramfs - A minimalistic initramfs implementation
 ========================================================
 
 This is a very minimalistic [initramfs](https://en.wikipedia.org/wiki/Initramfs)
