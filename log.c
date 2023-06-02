@@ -43,8 +43,8 @@ void panic(int err, ...)
    * because a kernel panic obscures the message. But we need to cause
    * a kernel panic (by PID 1 exiting), because if the user tells the
    * kernel to reboot on panic, we want to make sure this happens. */
-  warn("Will cause kernel panic in 10s...", NULL);
-  sleep(10);
+  warn("Causing kernel panic", NULL);
+  //sleep(10);
   _exit(1);
 }
 
